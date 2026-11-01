@@ -1,0 +1,44 @@
+{
+  "name": "hyaudio-toolbox",
+  "version": "1.0.0",
+  "description": "hyaudio · 调音师工具箱",
+  "main": "main.js",
+  "author": "hyaudio",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "node-unrar-js": "^2.0.2"
+  },
+  "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.hyaudio.toolbox",
+    "productName": "hyaudio调音师工具箱",
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*"
+    ],
+    "extraResources": [
+      { "from": "resources/installers", "to": "installers" }
+    ],
+    "win": {
+      "target": "nsis",
+      "requestedExecutionLevel": "requireAdministrator",
+      "artifactName": "hyaudio调音师工具箱-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "hyaudio调音师工具箱",
+      "language": "2052"
+    }
+  }
+}

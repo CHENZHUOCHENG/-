@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hyaudio · 调音师工具箱</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:-apple-system,"SF Pro Text","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  -webkit-font-smoothing:antialiased;overflow:hidden;color:var(--text);
+  background:#0b0b18;
+}
+/* ============ 主题 ============ */
+[data-theme="dark"]{
+  --text:#f2f2f7;--text2:rgba(235,235,245,.58);--text3:rgba(235,235,245,.38);
+  --a1:#8b7bff;--a2:#38bdf8;
+  --accent-grad:linear-gradient(120deg,#8b7bff,#38bdf8);
+  --glass:rgba(255,255,255,.055);--glass-strong:rgba(255,255,255,.10);
+  --stroke:rgba(255,255,255,.11);--stroke-strong:rgba(255,255,255,.18);
+  --card-shadow:0 6px 24px rgba(0,0,0,.35);
+  --inset-hi:inset 0 1px 0 rgba(255,255,255,.09);
+  --glow:0 6px 18px rgba(124,108,246,.42);
+  --backdrop-blobs:
+    radial-gradient(620px 460px at 10% -10%, rgba(139,123,255,.34), transparent 65%),
+    radial-gradient(700px 520px at 92% 4%, rgba(56,189,248,.26), transparent 65%),
+    radial-gradient(760px 600px at 55% 118%, rgba(217,70,239,.17), transparent 65%);
+  --bg:#0b0b18;
+}
+[data-theme="light"]{
+  --text:#1b1a22;--text2:rgba(27,26,34,.58);--text3:rgba(27,26,34,.38);
+  --a1:#6c5ce7;--a2:#00b8d4;
+  --accent-grad:linear-gradient(120deg,#6c5ce7,#00b8d4);
+  --glass:rgba(255,255,255,.55);--glass-strong:rgba(255,255,255,.78);
+  --stroke:rgba(255,255,255,.75);--stroke-strong:rgba(255,255,255,.9);
+  --card-shadow:0 8px 28px rgba(108,92,231,.14);
+  --inset-hi:inset 0 1px 0 rgba(255,255,255,.85);
+  --glow:0 6px 18px rgba(108,92,231,.35);
+  --backdrop-blobs:
+    radial-gradient(620px 460px at 8% -10%, rgba(167,139,250,.42), transparent 65%),
+    radial-gradient(680px 500px at 94% 4%, rgba(103,232,249,.40), transparent 65%),
+    radial-gradient(740px 560px at 50% 118%, rgba(249,168,212,.38), transparent 65%);
+  --bg:#f3f1fb;
+}
+body{background:var(--bg)}
+body::before{content:"";position:fixed;inset:0;z-index:0;background:var(--backdrop-blobs);transition:opacity .4s}
+
+/* ============ 启动视频 ============ */
+#splash{
+  position:fixed;inset:0;z-index:100;background:#0b0b18;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:opacity .7s ease,transform .7s cubic-bezier(.22,1,.36,1);
+}
+#splash video{width:100%;height:100%;object-fit:cover}
+#splash .splash-logo{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  text-align:center;color:#fff;pointer-events:none;
+}
+#splash .splash-logo .en{font-size:44px;font-weight:800;letter-spacing:6px;text-shadow:0 4px 30px rgba(139,123,255,.8)}
+#splash .splash-logo .cn{margin-top:10px;font-size:15px;letter-spacing:10px;opacity:.75}
+#splash .skip{position:absolute;right:26px;bottom:24px;font-size:12px;color:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:6px 16px;backdrop-filter:blur(8px)}
+#splash.hide{opacity:0;transform:scale(1.06);pointer-events:none}
+
+/* ============ 应用框架 ============ */
+#app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column;opacity:0;transform:scale(.985);transition:opacity .6s ease,transform .6s cubic-bezier(.22,1,.36,1)}
+#app.show{opacity:1;transform:none}
+.titlebar{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;-webkit-app-region:drag}
+.lights{display:flex;gap:8px;width:70px}
+.lights span{width:12px;height:12px;border-radius:50%;cursor:pointer}
+.lights .r{background:#ff5f57}.lights .y{background:#febc2e}.lights .g{background:#28c840}
+.titlebar-title{font-size:13px;font-weight:600;letter-spacing:.4px;color:var(--text2)}
+.titlebar-right{width:70px;text-align:right;font-size:11px;color:var(--text3)}
+.body{flex:1;display:flex;min-height:0}
+
+/* ============ 侧边栏 · 图标轨（Radium 风格） ============ */
+.sidebar{width:78px;flex:none;display:flex;flex-direction:column;align-items:center;padding:12px 0 14px;border-right:1px solid var(--stroke);gap:4px}
+.logo{display:flex;align-items:center;justify-content:center;padding:0 0 14px}
+.logo-icon{width:42px;height:42px;border-radius:13px;flex:none;background:var(--accent-grad);display:flex;align-items:center;justify-content:center;box-shadow:var(--glow),inset 0 1px 0 rgba(255,255,255,.35)}
+.logo-icon svg{width:22px;height:22px;stroke:#fff}
+.logo-name,.logo-sub,.nav-label,.nav-badge,.side-foot{display:none}
+.nav-item{position:relative;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:14px;cursor:pointer;color:var(--text2);transition:transform .22s cubic-bezier(.34,1.56,.64,1),background .2s,box-shadow .2s;border:none;background:none;font-family:inherit}
+.nav-item svg{width:20px;height:20px;stroke:var(--text2);flex:none;transition:stroke .2s}
+.nav-item:hover{background:var(--glass-strong);transform:scale(1.08)}
+.nav-item:hover svg{stroke:var(--text)}
+.nav-item.active{background:var(--accent-grad);box-shadow:var(--glow),inset 0 1px 0 rgba(255,255,255,.35)}
+.nav-item.active svg{stroke:#fff}
+.nav-item:active{transform:scale(.9)}
+.nav-item[data-page="tools"]{margin-top:14px}
+.nav-item[data-page="settings"]{margin-top:auto}
+.nav-item::after{content:attr(data-label);position:absolute;left:calc(100% + 14px);top:50%;transform:translateY(-50%) scale(.9);opacity:0;pointer-events:none;background:var(--glass-strong);backdrop-filter:blur(20px);border:1px solid var(--stroke-strong);color:var(--text);font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:9px;white-space:nowrap;transition:all .18s ease;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.nav-item:hover::after{opacity:1;transform:translateY(-50%) scale(1)}
+.admin-dot{display:inline-flex;align-items:center;gap:5px}
+.admin-dot i{width:6px;height:6px;border-radius:50%;background:#34e39a;box-shadow:0 0 8px #34e39a}
+
+/* ============ 主区 ============ */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.main-head{padding:26px 34px 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;position:relative}
+.hero-en{font-size:11px;font-weight:700;letter-spacing:3.5px;text-transform:uppercase;color:var(--text3);margin-bottom:7px;display:flex;align-items:center;gap:9px}
+.hero-en::before{content:"";width:20px;height:2px;border-radius:1px;background:var(--accent-grad)}
+.main-title{font-size:44px;font-weight:800;letter-spacing:.5px;line-height:1.05;background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.main-sub{font-size:12.5px;color:var(--text2);margin-top:8px}
+/* 全息漂浮体（Radium 标志元素） */
+.holo{position:absolute;top:4px;right:290px;width:92px;height:92px;pointer-events:none;animation:holoFloat 7s ease-in-out infinite;z-index:0}
+.holo i{position:absolute;inset:0;border-radius:42% 58% 55% 45%/48% 40% 60% 52%;
+  background:
+    radial-gradient(circle at 32% 26%,rgba(255,255,255,.95),rgba(255,255,255,0) 36%),
+    conic-gradient(from 210deg at 55% 45%,#a78bfa,#67e8f9,#34e39a,#f472b6,#fbbf24,#a78bfa);
+  filter:saturate(1.35) blur(.4px);opacity:.92;
+  box-shadow:0 18px 40px rgba(124,108,246,.35),inset 0 -8px 18px rgba(255,255,255,.22),inset 0 6px 14px rgba(255,255,255,.35);
+  animation:blobMorph 9s ease-in-out infinite alternate}
+@keyframes holoFloat{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-11px) rotate(5deg)}}
+@keyframes blobMorph{0%{border-radius:42% 58% 55% 45%/48% 40% 60% 52%}50%{border-radius:56% 44% 40% 60%/44% 58% 42% 56%}100%{border-radius:45% 55% 62% 38%/58% 42% 55% 45%}}
+@media (prefers-reduced-motion:reduce){.holo,.holo i{animation:none}}
+.search{width:236px;height:34px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--text3);font-size:12.5px;flex:none}
+.search input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:12.5px;font-family:inherit}
+.search input::placeholder{color:var(--text3)}
+.search svg{width:14px;height:14px;stroke:var(--text3);flex:none}
+.page{flex:1;overflow-y:auto;padding:2px 30px 76px;display:none;animation:pageIn .38s cubic-bezier(.22,1,.36,1)}
+.page.show{display:block}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.99)}to{opacity:1;transform:none}}
+.page::-webkit-scrollbar{width:8px}
+.page::-webkit-scrollbar-thumb{background:var(--glass-strong);border-radius:4px}
+
+/* ============ 卡片 ============ */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(208px,1fr));gap:14px}
+.card{position:relative;border-radius:16px;padding:15px 17px;background:var(--glass);border:1px solid var(--stroke);box-shadow:var(--card-shadow),var(--inset-hi);backdrop-filter:blur(24px) saturate(1.5);cursor:pointer;transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s,border-color .25s;overflow:hidden}
+.card:hover{transform:translateY(-4px) scale(1.012);border-color:color-mix(in srgb,var(--a1) 55%,transparent);box-shadow:0 14px 36px rgba(90,80,220,.28),var(--inset-hi)}
+.card:active{transform:scale(.965)}
+/* HUD 角标刻度（Radium 取景框元素） */
+.card::before{content:"";position:absolute;left:9px;top:9px;width:11px;height:11px;border-left:1.5px solid color-mix(in srgb,var(--a2) 70%,transparent);border-top:1.5px solid color-mix(in srgb,var(--a2) 70%,transparent);opacity:0;transition:opacity .25s;pointer-events:none;z-index:2}
+.card:hover::before{opacity:1}
+[data-theme="dark"] .card::after,[data-theme="light"] .card::after{content:"";position:absolute;right:9px;bottom:9px;width:11px;height:11px;border-right:1.5px solid color-mix(in srgb,var(--a2) 70%,transparent);border-bottom:1.5px solid color-mix(in srgb,var(--a2) 70%,transparent);opacity:0;transition:opacity .25s;pointer-events:none}
+[data-theme="dark"] .card:hover::after,[data-theme="light"] .card:hover::after{opacity:1}
+/* 菱形按钮（车载 HMI 签名元素） */
+.diamond-row{display:flex;gap:20px;margin-top:16px}
+.dm{width:44px;height:44px;border:none;cursor:pointer;background:var(--accent-grad);transform:rotate(45deg);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(124,108,246,.35),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .2s}
+.dm svg{width:18px;height:18px;stroke:#fff;transform:rotate(-45deg)}
+.dm:hover{transform:rotate(45deg) scale(1.14);box-shadow:0 12px 28px rgba(124,108,246,.5)}
+.dm:active{transform:rotate(45deg) scale(.88)}
+.dm:nth-child(2){background:linear-gradient(120deg,#38bdf8,#34e39a)}
+.dm:nth-child(3){background:linear-gradient(120deg,#f472b6,#a78bfa)}
+.card-icon{width:36px;height:36px;border-radius:11px;background:var(--accent-grad);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(124,108,246,.4),inset 0 1px 0 rgba(255,255,255,.35);margin-bottom:10px}
+.card-icon svg{width:18px;height:18px;stroke:#fff}
+.card-name{font-size:13.5px;font-weight:700}
+.card-desc{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.55}
+.card-tag{position:absolute;top:12px;right:12px;font-size:9.5px;font-weight:700;padding:2.5px 8px;border-radius:8px;background:var(--accent-grad);color:#fff;box-shadow:0 3px 10px rgba(124,108,246,.4)}
+.card-wide{grid-column:span 2;display:flex;flex-direction:column;min-height:212px}
+.card-wide-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.key-chip{font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:9px;background:var(--glass-strong);border:1px solid var(--stroke)}
+.wave{display:flex;align-items:flex-end;gap:3.5px;height:40px;margin-top:auto}
+.wave i{flex:1;border-radius:2px;background:var(--accent-grad);opacity:.9;box-shadow:0 0 8px rgba(124,108,246,.35);animation:wave 1.1s ease-in-out infinite alternate}
+@keyframes wave{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
+.wave i{transform-origin:bottom}
+@media (prefers-reduced-motion:reduce){.wave i{animation:none}}
+.switch-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.state{font-size:10.5px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.state i{width:6px;height:6px;border-radius:50%;background:#34e39a;box-shadow:0 0 6px #34e39a}
+.state.off i{background:#ff5f57;box-shadow:0 0 6px #ff5f57}
+.toggle{width:38px;height:23px;border-radius:12px;flex:none;background:linear-gradient(120deg,#34e39a,#00c853);position:relative;transition:background .2s;box-shadow:0 3px 10px rgba(52,227,154,.4);border:none;cursor:pointer;padding:0}
+.toggle::after{content:"";position:absolute;top:2px;right:2px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
+.toggle.off{background:rgba(140,140,150,.35);box-shadow:none}
+.toggle.off::after{transform:translateX(-15px)}
+
+/* 按钮 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;border-radius:10px;padding:8px 16px;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .2s,opacity .2s;position:relative;overflow:hidden}
+.btn:active{transform:scale(.94)}
+.btn-primary{background:var(--accent-grad);color:#fff;box-shadow:0 4px 14px rgba(124,108,246,.4)}
+.btn-primary:hover{box-shadow:0 6px 20px rgba(124,108,246,.55)}
+.btn-ghost{background:var(--glass);border:1px solid var(--stroke);color:var(--text)}
+.btn-ghost:hover{background:var(--glass-strong)}
+.btn-danger{background:linear-gradient(120deg,#ff6b6b,#ff453a);color:#fff;box-shadow:0 4px 14px rgba(255,69,58,.35)}
+.btn-sm{padding:6px 13px;font-size:11.5px;border-radius:9px}
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.5);transform:scale(0);animation:ripple .55s ease-out forwards;pointer-events:none}
+@keyframes ripple{to{transform:scale(2.6);opacity:0}}
+
+/* 状态栏 · 底部悬浮 Dock */
+.statusbar{position:fixed;left:calc(50% + 39px);transform:translateX(-50%);bottom:16px;z-index:40;min-height:44px;border-radius:999px;border:1px solid var(--stroke-strong);background:var(--glass-strong);backdrop-filter:blur(28px) saturate(1.6);display:flex;align-items:center;gap:10px;padding:0 18px;font-size:11.5px;color:var(--text2);box-shadow:0 14px 40px rgba(0,0,0,.32),var(--inset-hi);white-space:nowrap}
+.statusbar .ok{width:7px;height:7px;border-radius:50%;background:#34e39a;box-shadow:0 0 8px #34e39a;flex:none}
+.progress{width:0;height:5px;border-radius:3px;background:var(--glass-strong);overflow:hidden;opacity:0;transition:opacity .3s,width .35s cubic-bezier(.22,1,.36,1)}
+.progress.on{width:170px;opacity:1}
+.progress i{display:block;width:0;height:100%;border-radius:3px;background:var(--accent-grad);box-shadow:0 0 10px rgba(124,108,246,.6);transition:width .2s linear}
+.pct{font-variant-numeric:tabular-nums;font-weight:700;color:var(--text)}
+
+/* 分组标题 */
+.sec-title{font-size:13px;font-weight:700;color:var(--text2);margin:18px 0 10px;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:"";flex:1;height:1px;background:var(--stroke)}
+
+/* 驱动手风琴 */
+.acc{border-radius:14px;border:1px solid var(--stroke);background:var(--glass);backdrop-filter:blur(20px);margin-bottom:10px;overflow:hidden;transition:box-shadow .2s}
+.acc-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer}
+.acc-head:hover{background:var(--glass-strong)}
+.acc-logo{width:34px;height:34px;border-radius:10px;background:var(--glass-strong);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--a1);flex:none}
+.acc-name{font-size:13.5px;font-weight:700}
+.acc-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.acc-arrow{margin-left:auto;transition:transform .25s;color:var(--text3)}
+.acc.open .acc-arrow{transform:rotate(180deg)}
+.acc-body{max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.22,1,.36,1)}
+.acc-inner{padding:2px 16px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{font-size:11px;padding:4px 11px;border-radius:8px;background:var(--glass-strong);border:1px solid var(--stroke);color:var(--text2)}
+
+/* 弹窗 */
+.modal-mask{position:fixed;inset:0;z-index:60;background:rgba(8,8,20,.45);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}
+.modal-mask.on{opacity:1;pointer-events:auto}
+.modal{width:420px;max-width:92vw;max-height:80vh;overflow-y:auto;border-radius:18px;background:var(--glass-strong);backdrop-filter:blur(36px) saturate(1.6);border:1px solid var(--stroke-strong);box-shadow:0 30px 80px rgba(0,0,0,.45),var(--inset-hi);padding:22px;transform:scale(.92) translateY(14px);transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+.modal-mask.on .modal{transform:none}
+.modal h3{font-size:16px;font-weight:800;margin-bottom:6px}
+.modal .m-sub{font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.m-list{margin:4px 0;max-height:240px;overflow-y:auto}
+.m-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;font-size:12.5px}
+.m-row:hover{background:var(--glass)}
+.m-row .dot{width:7px;height:7px;border-radius:50%;background:var(--a2);flex:none;box-shadow:0 0 6px var(--a2)}
+.m-row .r-side{margin-left:auto;font-size:11px;color:var(--text3)}
+.m-progress{height:6px;border-radius:3px;background:var(--glass-strong);overflow:hidden;margin:14px 0 4px}
+.m-progress i{display:block;height:100%;width:0;background:var(--accent-grad);border-radius:3px;transition:width .15s linear;box-shadow:0 0 10px rgba(124,108,246,.6)}
+.key-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px}
+.key-grid .kg{padding:9px 0;text-align:center;font-size:12.5px;font-weight:700;border-radius:10px;background:var(--glass);border:1px solid var(--stroke);cursor:pointer;transition:all .15s}
+.key-grid .kg:hover{background:var(--glass-strong)}
+.key-grid .kg.sel{background:var(--accent-grad);color:#fff;border-color:transparent;box-shadow:var(--glow)}
+.check-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;font-size:12.5px;cursor:pointer}
+.check-row:hover{background:var(--glass)}
+.check-row input{accent-color:var(--a1);width:15px;height:15px}
+
+/* Toast */
+#toasts{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{background:var(--glass-strong);backdrop-filter:blur(28px);border:1px solid var(--stroke-strong);border-radius:12px;padding:10px 20px;font-size:12.5px;font-weight:600;box-shadow:0 12px 32px rgba(0,0,0,.3);animation:toastIn .35s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;gap:8px}
+@keyframes toastIn{from{opacity:0;transform:translateY(-14px) scale(.92)}to{opacity:1;transform:none}}
+.toast.out{transition:opacity .3s,transform .3s;opacity:0;transform:translateY(-10px)}
+.toast svg{width:15px;height:15px;stroke:#34e39a;flex:none}
+
+/* 滑条样式 */
+input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:var(--glass-strong);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35),0 0 8px var(--a1);cursor:pointer;transition:transform .15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+
+/* 网址导航 */
+.site-card{display:flex;align-items:center;gap:12px}
+.site-card .fav{width:38px;height:38px;border-radius:11px;background:var(--glass-strong);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--a1);overflow:hidden;flex:none}
+.site-card .fav img{width:22px;height:22px}
+.site-del{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:8px;border:none;background:var(--glass-strong);color:var(--text3);cursor:pointer;font-size:13px;line-height:1;display:none}
+.card:hover .site-del{display:block}
+.site-del:hover{color:#ff5f57}
+.add-form{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.add-form input{flex:1;min-width:140px;height:38px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);padding:0 13px;color:var(--text);font-size:12.5px;font-family:inherit;outline:none}
+.add-form input:focus{border-color:var(--a1)}
+
+/* 设置 */
+.seg{display:inline-flex;background:var(--glass);border:1px solid var(--stroke);border-radius:11px;padding:3px;gap:2px}
+.seg button{border:none;background:none;font-family:inherit;font-size:12px;font-weight:600;color:var(--text2);padding:7px 16px;border-radius:9px;cursor:pointer;transition:all .2s}
+.seg button.on{background:var(--accent-grad);color:#fff;box-shadow:0 3px 10px rgba(124,108,246,.35)}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border-radius:14px;background:var(--glass);border:1px solid var(--stroke);margin-bottom:10px;backdrop-filter:blur(20px)}
+.set-row .t{font-size:13px;font-weight:700}
+.set-row .d{font-size:11px;color:var(--text2);margin-top:3px}
+
+/* ============ 壁纸层 ============ */
+#wallpaper{position:fixed;inset:0;z-index:0;overflow:hidden;display:none}
+#wallpaper img,#wallpaper video{width:100%;height:100%;object-fit:cover}
+#wallpaper .dim{position:absolute;inset:0;background:rgba(5,5,16,.38)}
+[data-theme="light"] #wallpaper .dim{background:rgba(244,242,252,.25)}
+body.has-wallpaper::before{opacity:0}
+
+/* ============ 液态玻璃主题 ============ */
+[data-theme="glass"]{
+  --text:#f4f6ff;--text2:rgba(240,244,255,.62);--text3:rgba(240,244,255,.38);
+  --a1:#a78bfa;--a2:#67e8f9;
+  --accent-grad:linear-gradient(120deg,#a78bfa,#67e8f9);
+  --glass:rgba(255,255,255,.06);--glass-strong:rgba(255,255,255,.11);
+  --stroke:rgba(255,255,255,.15);--stroke-strong:rgba(255,255,255,.24);
+  --card-shadow:0 8px 30px rgba(0,0,0,.32);
+  --inset-hi:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.05);
+  --glow:0 6px 18px rgba(167,139,250,.45);
+  --backdrop-blobs:
+    radial-gradient(620px 460px at 10% -10%, rgba(167,139,250,.30), transparent 65%),
+    radial-gradient(700px 520px at 92% 4%, rgba(103,232,249,.24), transparent 65%),
+    radial-gradient(760px 600px at 55% 118%, rgba(217,70,239,.16), transparent 65%);
+  --bg:#08090f;
+}
+[data-theme="glass"] .card,[data-theme="glass"] .acc,[data-theme="glass"] .statusbar,
+[data-theme="glass"] .set-row,[data-theme="glass"] .search,[data-theme="glass"] .modal{
+  backdrop-filter:blur(34px) saturate(1.9);-webkit-backdrop-filter:blur(34px) saturate(1.9);
+}
+[data-theme="glass"] .card::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(155deg,rgba(255,255,255,.16),transparent 34%);
+}
+[data-theme="glass"] .sidebar{backdrop-filter:blur(40px) saturate(1.9);background:rgba(255,255,255,.03)}
+[data-theme="glass"] .card:hover{
+  border-color:rgba(255,255,255,.38);
+  box-shadow:0 16px 44px rgba(90,110,255,.35),inset 0 1px 0 rgba(255,255,255,.3);
+}
+
+/* ============ 壁纸按钮态 ============ */
+.seg.wp button.on{background:var(--accent-grad);color:#fff}
+
+@media (max-width:1080px){.holo{display:none}}
+@media (max-width:860px){
+  .sidebar{width:64px}
+  .nav-item{width:42px;height:42px}
+  .card-wide{grid-column:span 1}
+  .main-head{padding:18px 18px 10px}
+  .main-title{font-size:32px}
+  .page{padding:2px 18px 76px}
+  .search{display:none}
+}
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- 启动视频 -->
+<div id="splash">
+  <video id="splashVideo" src="splash.mp4" muted playsinline autoplay></video>
+  <div class="skip">点击任意处跳过 ›</div>
+</div>
+
+<div id="app">
+  <div class="titlebar">
+    <div class="lights"><span class="r" data-act="close"></span><span class="y" data-act="min"></span><span class="g" data-act="max"></span></div>
+    <div class="titlebar-title">hyaudio · 调音师工具箱</div>
+    <div class="titlebar-right">v1.0.0</div>
+  </div>
+  <div class="body">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4"/></svg></div>
+        <div><div class="logo-name">hyaudio</div><div class="logo-sub">调音师工具箱</div></div>
+      </div>
+      <div class="nav-label">安装</div>
+      <button class="nav-item" data-page="rack" data-label="机架安装"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></button>
+      <button class="nav-item" data-page="driver" data-label="声卡驱动"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg></button>
+      <button class="nav-item" data-page="plugin" data-label="插件安装"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M12 11v6M9 14h6"/></svg></button>
+      <div class="nav-label">工具</div>
+      <button class="nav-item active" data-page="tools" data-label="系统工具"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.1-.7-.7-2.1 2.4-2.8z"/></svg></button>
+      <button class="nav-item" data-page="download" data-label="软件下载"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg></button>
+      <button class="nav-item" data-page="links" data-label="网址导航"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3z"/></svg></button>
+      <div class="nav-label">其他</div>
+      <button class="nav-item" data-page="settings" data-label="设置"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.23.6.83 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.68 0-1.28.4-1.51 1z"/></svg></button>
+      <div class="side-foot"><span class="admin-dot"><i></i>管理员权限</span><span>在线更新 · 开</span></div>
+    </aside>
+
+    <main class="main">
+      <div class="main-head">
+        <div>
+          <div class="hero-en" id="pageEn">System Tools</div>
+          <div class="main-title" id="pageTitle">系统工具</div>
+          <div class="main-sub" id="pageSub">8 个工具 · 系统状态正常</div>
+        </div>
+        <div class="holo"><i></i></div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="searchInput" placeholder="搜索工具、软件、插件…">
+        </div>
+      </div>
+
+      <!-- 系统工具 -->
+      <section class="page show" id="page-tools">
+        <div class="grid">
+          <div class="card card-wide" data-tool="vocal">
+            <div class="card-wide-head">
+              <div><div class="card-name" style="font-size:15px">电音助手</div><div class="card-desc">电音基调一键查询 · 实时音频状态</div></div>
+              <span class="key-chip" id="keyChip">基调：F#m</span>
+            </div>
+            <div class="diamond-row">
+              <button class="dm" data-dm="vocal" title="基调设置"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
+              <button class="dm" data-dm="plugscan" title="插件扫描"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/></svg></button>
+              <button class="dm" data-dm="cclean" title="C 盘清理"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></button>
+            </div>
+            <div class="wave" id="wave"></div>
+          </div>
+          <div class="card" data-app="ai翻唱hyaudio"><span class="card-tag">HY</span>
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg></div>
+            <div class="card-name">AI 翻唱</div><div class="card-desc">启动 HY AI 翻唱工具</div>
+          </div>
+          <div class="card" data-tool="plugclean"><span class="card-tag">常用</span>
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></div>
+            <div class="card-name">插件清理</div><div class="card-desc">扫描失效与残留 VST 插件</div>
+          </div>
+          <div class="card" data-tool="plugscan">
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/></svg></div>
+            <div class="card-name">插件扫描</div><div class="card-desc">生成已装插件清单</div>
+          </div>
+          <div class="card" data-tool="cclean">
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
+            <div class="card-name">C 盘清理</div><div class="card-desc">清理缓存与系统残留</div>
+          </div>
+          <div class="card" data-tool="audio">
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></div>
+            <div class="card-name">声音通道</div><div class="card-desc">切换默认输入 / 输出设备</div>
+          </div>
+          <div class="card">
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/><path d="M12 8v4M12 15h.01"/></svg></div>
+            <div class="card-name">防火墙</div>
+            <div class="switch-row"><span class="state" id="fwState"><i></i>已开启</span><button class="toggle" id="fwToggle" aria-label="防火墙开关"></button></div>
+          </div>
+          <div class="card">
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
+            <div class="card-name">杀毒防护</div>
+            <div class="switch-row"><span class="state off" id="avState"><i></i>已关闭</span><button class="toggle off" id="avToggle" aria-label="杀毒防护开关"></button></div>
+          </div>
+          <div class="card" data-tool="appclean">
+            <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6M13 5l6 6-9.5 9.5a2.1 2.1 0 0 1-3-3L13 5z"/><path d="M4 20c1.5-1 3-1 4.5 0"/></svg></div>
+            <div class="card-name">软件清理</div><div class="card-desc">批量卸载 · 清除残留</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 机架安装 -->
+      <section class="page" id="page-rack">
+        <div class="sec-title">机架 / 宿主软件</div>
+        <div class="grid" id="rackGrid"></div>
+        <div class="sec-title">跳线工具</div>
+        <div class="grid" id="bridgeGrid"></div>
+      </section>
+
+      <!-- 声卡驱动 -->
+      <section class="page" id="page-driver"><div id="driverList"></div></section>
+
+      <!-- 插件安装 -->
+      <section class="page" id="page-plugin"><div id="pluginList"></div></section>
+
+      <!-- 软件下载 -->
+      <section class="page" id="page-download"><div class="grid" id="dlGrid"></div></section>
+
+      <!-- 网址导航 -->
+      <section class="page" id="page-links">
+        <div class="grid" id="siteGrid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))"></div>
+        <div class="sec-title">添加网站</div>
+        <div class="add-form">
+          <input id="siteName" placeholder="网站名称，如：B站音频区">
+          <input id="siteUrl" placeholder="网址，如：https://www.example.com">
+          <button class="btn btn-primary" id="addSite">＋ 添加</button>
+        </div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="page" id="page-settings">
+        <div class="sec-title">外观</div>
+        <div class="set-row">
+          <div><div class="t">主题模式</div><div class="d">深色极光 / 浅色弥散，可跟随系统自动切换</div></div>
+          <div class="seg" id="themeSeg">
+            <button data-t="dark">深色</button><button data-t="light">浅色</button><button data-t="glass">液态玻璃</button><button data-t="auto" class="on">跟随系统</button>
+          </div>
+        </div>
+        <div class="sec-title">壁纸</div>
+        <div class="set-row">
+          <div><div class="t">内置壁纸</div><div class="d">动态壁纸在液态玻璃主题下效果最佳</div></div>
+          <div class="seg wp" id="wpSeg">
+            <button data-wp="aurora" class="on">默认极光</button><button data-wp="nebula">星云</button><button data-wp="wave">波形律动 · 动态</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div><div class="t">自定义壁纸</div><div class="d">上传静态图片或动态视频作为界面背景</div></div>
+          <div style="display:flex;gap:8px;flex:none">
+            <button class="btn btn-ghost btn-sm" id="wpPickImg">选择图片</button>
+            <button class="btn btn-ghost btn-sm" id="wpPickVid">选择视频</button>
+            <button class="btn btn-ghost btn-sm" id="wpReset">恢复默认</button>
+          </div>
+        </div>
+        <input type="file" id="wpFileImg" accept="image/*" hidden>
+        <input type="file" id="wpFileVid" accept="video/mp4,video/webm" hidden>
+        <div class="sec-title">素材目录</div>
+        <div class="set-row">
+          <div><div class="t">安装包素材目录</div><div class="d" id="matDirText">自动检测 D:\工具箱素材；机架 / 插件 / 工具的安装包都从这里读取</div></div>
+          <button class="btn btn-ghost btn-sm" id="pickMatDir">选择文件夹</button>
+        </div>
+        <div class="sec-title">常规</div>
+        <div class="set-row">
+          <div><div class="t">启动声音</div><div class="d">启动视频播放时的提示音</div></div>
+          <div style="display:flex;align-items:center;gap:12px;flex:none">
+            <input type="range" id="setVol" min="0" max="100" value="60" style="width:130px">
+            <span id="volPct" style="font-size:11.5px;color:var(--text2);width:36px;text-align:right">60%</span>
+            <button class="toggle" id="setSound"></button>
+          </div>
+        </div>
+        <div class="set-row"><div><div class="t">视频启动界面</div><div class="d">启动时播放 splash.mp4，可在程序目录替换视频</div></div><button class="toggle" id="setSplash"></button></div>
+        <div class="set-row"><div><div class="t">开机自启动</div><div class="d">登录 Windows 后自动运行 hyaudio</div></div><button class="toggle off" id="setBoot"></button></div>
+        <div class="set-row"><div><div class="t">在线更新</div><div class="d">自动检查新版本与云端链接配置</div></div><button class="toggle" id="setUpdate"></button></div>
+        <div class="sec-title">关于</div>
+        <div class="set-row"><div><div class="t">hyaudio · 调音师工具箱</div><div class="d">版本 v1.0.0 · 授权开关已预留（当前：自用版）</div></div><button class="btn btn-ghost btn-sm" id="checkUpdate">检查更新</button></div>
+      </section>
+
+      <div class="statusbar">
+        <span class="admin-dot"><i></i>管理员</span><span id="statusText">就绪</span>
+        <span class="progress" id="dlProgress"><i></i></span>
+        <span class="pct" id="dlPct"></span>
+        <span style="color:var(--text3)">在线更新 · 开</span>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
+<div id="toasts"></div>
+<script>
+/* ================= 工具函数 ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const store={get(k,d){try{const v=localStorage.getItem('hya-'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){localStorage.setItem('hya-'+k,JSON.stringify(v))}};
+
+function toast(msg){
+  const t=document.createElement('div');t.className='toast';
+  t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>'+msg;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),320)},2200);
+}
+/* 涟漪 */
+document.addEventListener('pointerdown',e=>{
+  const el=e.target.closest('.btn,.card,.nav-item');if(!el)return;
+  const r=el.getBoundingClientRect(),s=document.createElement('span');s.className='ripple';
+  const size=Math.max(r.width,r.height);
+  s.style.cssText+=`width:${size}px;height:${size}px;left:${e.clientX-r.left-size/2}px;top:${e.clientY-r.top-size/2}px`;
+  el.appendChild(s);setTimeout(()=>s.remove(),600);
+});
+
+/* ================= 主题 ================= */
+const media=matchMedia('(prefers-color-scheme: light)');
+function applyTheme(){
+  const urlT=new URLSearchParams(location.search).get('theme');
+  const m=urlT||store.get('theme','auto');
+  const t=m==='auto'?(media.matches?'light':'dark'):m;
+  document.body.dataset.theme=t;
+  $$('#themeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===m));
+}
+media.addEventListener('change',applyTheme);applyTheme();
+$('#themeSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  store.set('theme',b.dataset.t);applyTheme();
+  toast('主题已切换：'+b.textContent);
+});
+
+/* ================= 启动视频 ================= */
+(function(){
+  const sp=$('#splash'),v=$('#splashVideo');
+  function enter(){sp.classList.add('hide');$('#app').classList.add('show');setTimeout(()=>sp.remove(),800)}
+  if(store.get('splashOn',true)===false||new URLSearchParams(location.search).has('nosplash')){enter();return}
+  /* 启动声音：音量 + 开关（浏览器限制自动播放声音，首次点击即解除静音；桌面版无此限制） */
+  const soundOn=store.get('soundOn',true),vol=store.get('soundVol',60)/100;
+  v.volume=vol;
+  if(soundOn){
+    const unmute=()=>{v.muted=false;v.volume=vol;document.removeEventListener('pointerdown',unmute)};
+    document.addEventListener('pointerdown',unmute);
+    v.play().then(()=>{v.muted=false}).catch(()=>{});
+  }
+  v.addEventListener('ended',enter);
+  v.addEventListener('error',enter);
+  sp.addEventListener('click',()=>{v.pause();enter()});
+  setTimeout(()=>{if(document.body.contains(sp)&&!sp.classList.contains('hide'))enter()},20000);
+})();
+
+/* ================= 导航 ================= */
+const pageMeta={
+  tools:['系统工具','System Tools','8 个工具 · 系统状态正常'],
+  rack:['机架安装','Rack Installer','内置安装包 · 一键安装'],
+  driver:['声卡驱动','Driver Hub','官方驱动直链 · 按品牌分类'],
+  plugin:['插件安装','VST Plugins','VST / VST3 效果器 · 一键部署'],
+  download:['软件下载','App Center','直播与音乐平台 · 官方直链'],
+  links:['网址导航','Web Links','在线音频工具 · 可自定义添加'],
+  settings:['设置','Settings','外观 · 常规 · 关于']
+};
+$$('.nav-item').forEach(n=>n.addEventListener('click',()=>{
+  $$('.nav-item').forEach(x=>x.classList.remove('active'));n.classList.add('active');
+  const p=n.dataset.page;
+  $$('.page').forEach(pg=>pg.classList.remove('show'));
+  const el=$('#page-'+p);void el.offsetWidth;el.classList.add('show');
+  $('#pageEn').textContent=pageMeta[p][1];$('#pageTitle').textContent=pageMeta[p][0];$('#pageSub').textContent=pageMeta[p][2];
+}));
+/* 窗口灯（演示） */
+$$('.lights span').forEach(l=>l.addEventListener('click',()=>{
+  const act=l.dataset.act;
+  if(window.hya){window.hya.win(act);return}
+  toast('桌面版中此按钮将'+({close:'关闭窗口',min:'最小化到托盘',max:'最大化窗口'}[act]));
+}));
+
+/* ================= 状态栏下载模拟 ================= */
+let dlTimer=null;
+function simDownload(name){
+  const bar=$('#dlProgress'),fill=bar.querySelector('i'),pct=$('#dlPct'),txt=$('#statusText');
+  clearInterval(dlTimer);let p=0;
+  bar.classList.add('on');txt.textContent='正在下载 '+name;
+  dlTimer=setInterval(()=>{
+    p=Math.min(100,p+Math.random()*7+2);
+    fill.style.width=p+'%';pct.textContent=Math.floor(p)+'%';
+    if(p>=100){clearInterval(dlTimer);txt.textContent='就绪';toast(name+' 下载完成，已调起安装程序');
+      setTimeout(()=>{bar.classList.remove('on');fill.style.width='0';pct.textContent=''},1200)}
+  },120);
+}
+
+/* ================= 弹窗 ================= */
+const mask=$('#modalMask'),box=$('#modalBox');
+function openModal(html){box.innerHTML=html;mask.classList.add('on')}
+function closeModal(){mask.classList.remove('on')}
+mask.addEventListener('click',e=>{if(e.target===mask)closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+function confirmModal(title,sub,okText,danger,onOk){
+  openModal(`<h3>${title}</h3><div class="m-sub">${sub}</div>
+  <div class="modal-actions"><button class="btn btn-ghost" id="mCancel">取消</button>
+  <button class="btn ${danger?'btn-danger':'btn-primary'}" id="mOk">${okText}</button></div>`);
+  $('#mCancel').onclick=closeModal;
+  $('#mOk').onclick=()=>{closeModal();onOk()};
+}
+function progressModal(title,rows,done){
+  openModal(`<h3>${title}</h3><div class="m-sub" id="mScanText">正在扫描，请稍候…</div>
+  <div class="m-progress"><i id="mBar"></i></div><div class="m-list" id="mList"></div>
+  <div class="modal-actions"><button class="btn btn-primary" id="mDone" style="display:none">完成</button></div>`);
+  let i=0;const bar=$('#mBar'),list=$('#mList');
+  const timer=setInterval(()=>{
+    if(i<rows.length){
+      const [name,side]=rows[i];
+      list.insertAdjacentHTML('beforeend',`<div class="m-row"><span class="dot"></span>${name}<span class="r-side">${side}</span></div>`);
+      list.scrollTop=list.scrollHeight;i++;bar.style.width=(i/rows.length*100)+'%';
+      $('#mScanText').textContent=`正在扫描（${i}/${rows.length}）…`;
+    }else{
+      clearInterval(timer);$('#mScanText').textContent=done;
+      const b=$('#mDone');b.style.display='';b.onclick=closeModal;
+    }
+  },260);
+}
+
+/* ================= 系统工具交互 ================= */
+/* 波形条 */
+(function(){const w=$('#wave');for(let i=0;i<20;i++){const b=document.createElement('i');
+  b.style.height=(30+Math.random()*70)+'%';b.style.animationDuration=(0.7+Math.random()*0.9)+'s';
+  b.style.animationDelay=(Math.random()*-1.2)+'s';w.appendChild(b)}})();
+
+$('#fwToggle').addEventListener('click',()=>{
+  const on=!$('#fwToggle').classList.contains('off');
+  confirmModal(on?'关闭防火墙？':'开启防火墙',on?'关闭后系统将面临网络攻击风险，建议仅在调试机架跳线时临时关闭。':'将恢复 Windows 防火墙的默认防护。',on?'确认关闭':'确认开启',on,()=>{
+    $('#fwToggle').classList.toggle('off');
+    const s=$('#fwState');s.classList.toggle('off');s.innerHTML=on?'<i></i>已关闭':'<i></i>已开启';
+    if(window.hya)window.hya.firewall(!on).then(r=>{if(!r.ok)toast('防火墙设置失败：'+(r.msg||'需要管理员权限'));});
+    toast(on?'防火墙已关闭':'防火墙已开启');
+  });
+});
+$('#avToggle').addEventListener('click',()=>{
+  const off=$('#avToggle').classList.contains('off');
+  confirmModal(off?'关闭杀毒防护？':'开启杀毒防护',off?'关闭 Defender 实时保护后，安装机架插件不会被拦截，但系统风险升高。':'将恢复 Defender 实时保护。',off?'确认关闭':'确认开启',off,()=>{
+    $('#avToggle').classList.toggle('off');
+    const s=$('#avState');s.classList.toggle('off');s.innerHTML=off?'<i></i>已关闭':'<i></i>已开启';
+    if(window.hya)window.hya.defender(off).then(r=>{if(!r.ok)toast('防护设置失败：'+(r.msg||'可能被系统篡改防护拦截'));});
+    toast(off?'杀毒防护已关闭':'杀毒防护已开启');
+  });
+});
+
+const toolHandlers={
+  vocal(){
+    const keys=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Am','Bm','Cm','F#m'];
+    openModal(`<h3>电音助手 · 基调设置</h3><div class="m-sub">选择歌曲基调，电音效果将自动匹配（演示数据）。</div>
+    <div class="key-grid">${keys.map(k=>`<div class="kg${k==='F#m'?' sel':''}">${k}</div>`).join('')}</div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="mInstallVocal">安装 / 更新电音助手</button><button class="btn btn-primary" id="mOkKey">应用基调</button></div>`);
+    $('#mInstallVocal').onclick=()=>{
+      if(window.hya){closeModal();toast('正在调起电音助手安装程序…');window.hya.runInstaller('新版电音助手安装包').then(r=>toast(r.msg));}
+      else toast('桌面版中调起电音助手安装程序');
+    };
+    box.querySelectorAll('.kg').forEach(g=>g.onclick=()=>{box.querySelectorAll('.kg').forEach(x=>x.classList.remove('sel'));g.classList.add('sel')});
+    $('#mOkKey').onclick=()=>{const k=box.querySelector('.kg.sel').textContent;$('#keyChip').textContent='基调：'+k;closeModal();toast('基调已切换为 '+k)};
+  },
+  plugclean(){
+    if(window.hya){toast('正在调起插件清理工具…');window.hya.runInstaller('hy音频插件清理工具').then(r=>toast(r.msg));return}
+    progressModal('插件清理 · 扫描失效插件',
+    [['Waves Tune Lite.vst3','路径失效'],['OldReverb.dll','重复插件'],['Comp4Free.vst','残留文件'],['EchoBoy Jr.vst3','正常'],['Pro-Q 3.vst3','正常'],['Valhalla Room.vst3','正常']],
+    '扫描完成：发现 3 个问题项，已隔离待清理');},
+  plugscan(){
+    if(window.hya){
+      openModal('<h3>插件扫描 · 已安装插件清单</h3><div class="m-sub" id="mScanText">正在扫描 VST / VST3 目录…</div><div class="m-list" id="mList"></div><div class="modal-actions"><button class="btn btn-primary" id="mDone" style="display:none">完成</button></div>');
+      window.hya.scanPlugins().then(r=>{
+        const list=$('#mList');
+        if(r.ok&&r.items.length){r.items.forEach(it=>list.insertAdjacentHTML('beforeend',`<div class="m-row"><span class="dot"></span>${it[0]}<span class="r-side">${it[1]}</span></div>`));
+          $('#mScanText').textContent='扫描完成：共发现 '+r.items.length+' 个插件';}
+        else $('#mScanText').textContent='未发现插件（可检查插件目录设置）';
+        const b=$('#mDone');b.style.display='';b.onclick=closeModal;
+      });
+      return;
+    }
+    progressModal('插件扫描 · 已安装插件清单',
+    [['Pro-Q 3','FabFilter · VST3'],['Valhalla VintageVerb','v3.2 · VST3'],['Waves Tune Real-Time','v14 · VST3'],['CLA-76 Compressor','Waves · VST3'],['Decapitator','Soundtoys · VST3'],['Auto-Key','Antares · VST3'],['Ozone 10 Maximizer','iZotope · VST3']],
+    '扫描完成：共发现 128 个插件，清单已生成');},
+  cclean(){
+    openModal(`<h3>C 盘清理</h3><div class="m-sub">正在分析系统垃圾…</div>
+    <div class="m-progress"><i id="cBar"></i></div><div class="m-list" id="cList"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="cCancel">取消</button>
+    <button class="btn btn-primary" id="cGo" style="display:none">立即清理</button></div>`);
+    const items=[['系统临时文件','1.4 GB'],['Windows 更新残留','1.1 GB'],['应用缓存','512 MB'],['回收站','186 MB']];
+    let i=0;const timer=setInterval(()=>{
+      if(i<items.length){$('#cList').insertAdjacentHTML('beforeend',`<div class="m-row"><span class="dot"></span>${items[i][0]}<span class="r-side">${items[i][1]}</span></div>`);
+        $('#cBar').style.width=((++i)/items.length*100)+'%';}
+      else{clearInterval(timer);box.querySelector('.m-sub').textContent='扫描完成，预计可释放 3.2 GB';$('#cGo').style.display='';}
+    },350);
+    $('#cCancel').onclick=closeModal;
+    $('#cGo').onclick=()=>{closeModal();
+      if(window.hya){toast('正在清理系统垃圾…');window.hya.cleanTemp().then(r=>toast(r.ok?('清理完成，已释放 '+r.freed):'清理完成'));return}
+      toast('清理完成，已释放 3.2 GB 空间')};
+  },
+  audio(){
+    openModal(`<h3>声音通道设置</h3><div class="m-sub">选择系统默认播放 / 录音设备（演示数据）。</div>
+    <div class="m-list">
+      <label class="check-row"><input type="radio" name="out" checked>扬声器 · ICON Upod Pro（默认）</label>
+      <label class="check-row"><input type="radio" name="out">耳机 · Realtek High Definition Audio</label>
+      <label class="check-row"><input type="radio" name="out">Voicemeeter Input（虚拟通道）</label>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="aPanel">打开声音控制面板</button>
+    <button class="btn btn-primary" id="aOk">设为默认</button></div>`);
+    $('#aOk').onclick=()=>{closeModal();toast('默认输出设备已切换')};
+    $('#aPanel').onclick=()=>{closeModal();if(window.hya){window.hya.openSound();return}toast('桌面版将调起 Windows 声音控制面板')};
+  },
+  appclean(){
+    openModal(`<h3>软件清理</h3><div class="m-sub">勾选需要卸载的软件，将同时清除残留文件与注册表项。</div>
+    <div class="m-list">
+      <label class="check-row"><input type="checkbox">旧版机架宿主（残留 256 MB）</label>
+      <label class="check-row"><input type="checkbox">捆绑安装的工具条（残留 32 MB）</label>
+      <label class="check-row"><input type="checkbox">过期驱动安装包（残留 480 MB）</label>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="uCancel">取消</button>
+    <button class="btn btn-danger" id="uOk">卸载并清除残留</button></div>`);
+    $('#uCancel').onclick=closeModal;
+    $('#uOk').onclick=()=>{closeModal();toast('卸载完成，残留已清除')};
+  }
+};
+$$('#page-tools .card[data-tool]').forEach(c=>c.addEventListener('click',e=>{
+  if(e.target.closest('.toggle'))return;
+  toolHandlers[c.dataset.tool]();
+}));
+/* 菱形快捷按钮 */
+$$('.dm').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();toolHandlers[d.dataset.dm]()}));
+$$('#page-tools .card[data-app]').forEach(c=>c.addEventListener('click',()=>{
+  if(window.hya){toast('正在启动…');window.hya.runInstaller(c.dataset.app).then(r=>toast(r.msg));}
+  else toast('桌面版中启动「'+c.querySelector('.card-name').textContent+'」');
+}));
+
+/* ================= 机架安装 ================= */
+const racks=[
+  ['HY-Audio Fender Studio Pro','旗舰机架宿主 · Fender 联名版','HY 定制版'],
+  ['HY-Audio Studio One 7','最新一代机架宿主','HY 定制版'],
+  ['HY-Audio Studio One 6','全能机架宿主 · 主播首选','HY 定制版'],
+  ['HY-Audio Studio One 5','经典稳定版本','HY 定制版'],
+  ['HY-Audio Studio One 4','轻量老版本 · 兼容老插件','HY 定制版'],
+];
+const bridges=[['ASIOLinkPro 虚拟声卡跳线','低延迟内录跳线 · 方案A（压缩包自动部署）','zip'],['WDM2VST Ultra 虚拟跳线','系统级虚拟声卡通道 · 内录方案B','v1.2.0','WDM2VST Ultra']];
+function installCard([name,desc,ver,key]){
+  return `<div class="card"><div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></div>
+  <div class="card-name">${name}</div><div class="card-desc">${desc}</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+  <span class="chip">${ver}</span><button class="btn btn-primary btn-sm" data-dl="${key||name}">一键安装</button></div></div>`;
+}
+$('#rackGrid').innerHTML=racks.map(installCard).join('');
+$('#bridgeGrid').innerHTML=bridges.map(installCard).join('');
+
+/* ================= 声卡驱动 ================= */
+const drivers=[
+  ['Antelope','羚羊','Discrete / Zen / Orion 系列 · 本地安装包','https://zh.antelopeaudio.com/get-started-zh/','A','Antelope_Launcher'],
+  ['IXI MEGA','ixi 系列','M2 Plus / M8 Plus / A2 系列','https://www.iximega.com/Download','iX'],
+  ['TITAN','泰坦系列','迷笛旗下 TITAN Q3 / Q6 系列','https://www.midiplus.com','T'],
+  ['Midiplus','迷笛','Studio / Routist / R1 / R2 系列','https://www.midiplus.com','MP'],
+  ['ICON','艾肯','Upod Pro / MobileU / Live 系列','https://www.iconproaudio.com.cn','i'],
+  ['Focusrite','福克斯特','Scarlett / Clarett 系列','https://focusrite.com/downloads','F'],
+  ['Universal Audio','阿波罗','Apollo / Volt 系列','https://www.uaudio.com/downloads/uad','U'],
+  ['Audient','iD 系列','iD4 / iD14 / iD22 / EVO 系列','https://audient.com/products/audio-interfaces/','iD'],
+  ['MOTU','马头','M2 / M4 / UltraLite 系列','https://motu.com/en-us/download/','M'],
+  ['RME','Babyface 系列','Babyface Pro / Fireface 系列','https://rme-audio.de/downloads.html','R'],
+  ['Behringer','百灵达','UMC / FLOW 系列','https://www.behringer.com/downloads.html','B'],
+  ['Apogee','apogee 系列','Duet / BOOM / Symphony 系列','https://apogeedigital.com/installer-downloads','Ap'],
+  ['Yamaha','雅马哈','AG / UR 系列 · 通用 USB 驱动','https://www.steinberg.net/support/downloads/','Y'],
+  ['TOPPING','拓品','E2x2 / E1x2 OTG 系列','https://www.toppingaudio.com/zh/downloads','Tp'],
+  ['Prism Sound','天琴座','Lyra / Titan / Atlas 系列','https://www.prismsound.com/music_recording/support_downloads.php','Ly'],
+];
+$('#driverList').innerHTML=drivers.map(([en,cn,model,url,ch,local])=>`
+  <div class="acc"><div class="acc-head">
+    <div class="acc-logo">${ch}</div>
+    <div><div class="acc-name">${en} · ${cn}</div><div class="acc-sub">${model}</div></div>
+    <svg class="acc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+  </div><div class="acc-body"><div class="acc-inner">
+    <span class="chip">${model}</span>
+    ${local?`<button class="btn btn-primary btn-sm" data-dl="${local}">一键安装 · 本地安装包</button>`:''}
+    <a class="btn ${local?'btn-ghost':'btn-primary'} btn-sm" href="${url}" target="_blank" rel="noopener">打开官网驱动页</a>
+  </div></div></div>`).join('');
+$$('.acc-head').forEach(h=>h.addEventListener('click',e=>{
+  if(e.target.closest('a'))return;
+  const acc=h.parentElement,body=acc.querySelector('.acc-body'),open=acc.classList.toggle('open');
+  body.style.maxHeight=open?body.scrollHeight+'px':'0';
+}));
+
+/* ================= 插件安装 ================= */
+const pluginGroups={
+  '插件（压缩包 · 自动解压安装）':[
+    ['BACKMASK','zip 压缩包 · 388 MB'],['Softube Tape v2.5.9','zip 压缩包 · 34 MB'],
+    ['Psypan FREE 2.0','zip 压缩包 · 71 MB'],['Cymatics Phantom','rar 压缩包 · 27 MB'],
+    ['Cymatics Horizon 1.0.0','rar 压缩包 · 19 MB'],['Halo','rar 压缩包 · 44 MB'],
+    ['TBT VOTT 1.1.0','rar 压缩包 · 34 MB'],['Flux Pure Analyzer v1.10.4','rar 压缩包 · 65 MB']
+  ],
+  '大型音源 / 采样库':[
+    ['下雨天','rar 压缩包 · 约 9.8 GB · 解压需 20GB 临时空间，请耐心等待']
+  ]
+};
+$('#pluginList').innerHTML=Object.entries(pluginGroups).map(([g,items])=>`
+  <div class="sec-title">${g}</div><div class="grid">${items.map(([n,d])=>`
+  <div class="card"><div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M12 11v6M9 14h6"/></svg></div>
+  <div class="card-name">${n}</div><div class="card-desc">${d}</div>
+  <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary btn-sm" data-dl="${n}">一键安装</button></div></div>`).join('')}</div>`).join('');
+
+/* ================= 软件下载 ================= */
+const dls=[
+  ['抖音直播伴侣','直播开播必备工具','https://www.douyin.com'],
+  ['Coco 语音','语音社交平台','https://www.baidu.com/s?wd=coco%E8%AF%AD%E9%9F%B3%E5%AE%98%E7%BD%91'],
+  ['TT 语音·娱乐版','开黑语音 · 娱乐直播','https://www.52tt.com'],
+  ['全民 K 歌','唱歌交友平台','https://kg.qq.com'],
+  ['酷狗音乐','音乐播放 · 伴奏曲库','https://www.kugou.com'],
+  ['网易云音乐','音乐播放 · 歌单社区','https://music.163.com'],
+  ['抖音','短视频平台','https://www.douyin.com'],
+];
+$('#dlGrid').innerHTML=dls.map(([n,d,u])=>`
+  <div class="card"><div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg></div>
+  <div class="card-name">${n}</div><div class="card-desc">${d}</div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+  <a class="btn btn-primary btn-sm" href="${u}" target="_blank" rel="noopener">官方下载</a>
+  <button class="btn btn-ghost btn-sm" data-dl="${n}">箱内下载</button></div></div>`).join('');
+
+/* 所有“一键安装/箱内下载”按钮 */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-dl]');if(!b)return;
+  if(window.hya){toast('正在处理「'+b.dataset.dl+'」，大文件解压需要几分钟…');window.hya.runInstaller(b.dataset.dl).then(r=>toast(r.msg));return}
+  simDownload(b.dataset.dl);
+});
+
+/* ================= 网址导航 ================= */
+const builtinSites=[
+  ['SoundGym','在线听力训练 · 调音师练耳','https://www.soundgym.co'],
+  ['Audio Test Kitchen','麦克风 / 设备在线对比试听','https://www.audiotestkitchen.com'],
+  ['Telefunken 沉浸体验','Immersive Studio Experience','https://www.telefunken-elektroakustik.com'],
+];
+function renderSites(){
+  const custom=store.get('sites',[]);
+  const all=[...builtinSites.map(s=>({n:s[0],d:s[1],u:s[2],c:false})),...custom.map(s=>({...s,c:true}))];
+  $('#siteGrid').innerHTML=all.map((s,i)=>{
+    let host='';try{host=new URL(s.u).hostname}catch(e){}
+    return `<div class="card site-card" data-url="${s.u}">
+      ${s.c?`<button class="site-del" data-del="${i-builtinSites.length}">×</button>`:''}
+      <div class="fav"><img src="https://www.google.com/s2/favicons?domain=${host}&sz=64" onerror="this.remove()" alt=""><span>${s.n[0]}</span></div>
+      <div><div class="card-name">${s.n}</div><div class="card-desc">${s.d}</div></div></div>`;
+  }).join('');
+}
+renderSites();
+$('#siteGrid').addEventListener('click',e=>{
+  const del=e.target.closest('.site-del');
+  if(del){const sites=store.get('sites',[]);sites.splice(+del.dataset.del,1);store.set('sites',sites);renderSites();toast('已删除该网站');return}
+  const card=e.target.closest('.site-card');if(card)window.open(card.dataset.url,'_blank','noopener');
+});
+$('#addSite').addEventListener('click',()=>{
+  const n=$('#siteName').value.trim(),u=$('#siteUrl').value.trim();
+  if(!n||!u){toast('请填写网站名称和网址');return}
+  if(!/^https?:\/\//.test(u)){toast('网址需以 http:// 或 https:// 开头');return}
+  const sites=store.get('sites',[]);sites.push({n,d:'自定义网站',u});store.set('sites',sites);
+  $('#siteName').value='';$('#siteUrl').value='';renderSites();toast('已添加「'+n+'」');
+});
+
+/* ================= 壁纸 ================= */
+let wpLayer=null;
+function ensureWpLayer(){
+  if(!wpLayer){wpLayer=document.createElement('div');wpLayer.id='wallpaper';document.body.prepend(wpLayer)}
+  return wpLayer;
+}
+function applyWallpaper(wp,persist){
+  const layer=ensureWpLayer();
+  $$('#wpSeg button').forEach(b=>b.classList.toggle('on',wp&&wp.kind==='preset'&&b.dataset.wp===wp.id||(!wp&&b.dataset.wp==='aurora')));
+  if(!wp||wp.id==='aurora'){
+    layer.style.display='none';layer.innerHTML='';document.body.classList.remove('has-wallpaper');
+  }else{
+    let inner='';
+    if(wp.kind==='preset'&&wp.id==='nebula')inner='<img src="wallpaper-nebula.jpg" alt="">';
+    else if(wp.kind==='preset'&&wp.id==='wave')inner='<video src="splash.mp4" muted loop autoplay playsinline></video>';
+    else if(wp.kind==='image')inner=`<img src="${wp.data}" alt="">`;
+    else if(wp.kind==='video')inner=`<video src="${wp.data}" muted loop autoplay playsinline></video>`;
+    layer.innerHTML=inner+'<div class="dim"></div>';layer.style.display='block';
+    document.body.classList.add('has-wallpaper');
+  }
+  if(persist!==false){
+    if(wp&&wp.kind==='video'){store.set('wallpaper',null)}
+    else store.set('wallpaper',wp||null);
+  }
+}
+$('#wpSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  const id=b.dataset.wp;
+  applyWallpaper(id==='aurora'?null:{kind:'preset',id});
+  toast('壁纸已切换：'+b.textContent);
+});
+$('#wpPickImg').addEventListener('click',()=>$('#wpFileImg').click());
+$('#wpPickVid').addEventListener('click',()=>$('#wpFileVid').click());
+$('#wpFileImg').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  if(f.size>4*1024*1024){toast('图片请小于 4MB');return}
+  const r=new FileReader();
+  r.onload=()=>{applyWallpaper({kind:'image',data:r.result});toast('自定义图片壁纸已应用')};
+  r.readAsDataURL(f);e.target.value='';
+});
+$('#wpFileVid').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const url=URL.createObjectURL(f);
+  applyWallpaper({kind:'video',data:url});
+  toast('动态壁纸已应用（桌面版将永久保存）');e.target.value='';
+});
+$('#wpReset').addEventListener('click',()=>{applyWallpaper(null);toast('已恢复默认壁纸')});
+/* 调试参数：?wp=图片地址 */
+const _wpUrl=new URLSearchParams(location.search).get('wp');
+if(_wpUrl)applyWallpaper({kind:'image',data:_wpUrl},false);
+else applyWallpaper(store.get('wallpaper',null),false);
+
+/* ================= 设置 ================= */
+function bindSetting(id,key,def,msg){
+  const el=$(id);const on=store.get(key,def);el.classList.toggle('off',!on);
+  el.addEventListener('click',()=>{
+    const now=el.classList.toggle('off')===false;store.set(key,now);toast(msg+(now?'已开启':'已关闭'));
+  });
+}
+bindSetting('#setSplash','splashOn',true,'视频启动界面');
+bindSetting('#setSound','soundOn',true,'启动声音');
+bindSetting('#setBoot','bootOn',false,'开机自启动');
+if(window.hya)$('#setBoot').addEventListener('click',()=>setTimeout(()=>window.hya.setBoot(!$('#setBoot').classList.contains('off')),0));
+bindSetting('#setUpdate','updateOn',true,'在线更新');
+(function(){
+  const r=$('#setVol'),p=$('#volPct');
+  r.value=store.get('soundVol',60);p.textContent=r.value+'%';
+  r.addEventListener('input',()=>{p.textContent=r.value+'%';store.set('soundVol',+r.value)});
+  r.addEventListener('change',()=>toast('启动音量：'+r.value+'%'));
+})();
+$('#checkUpdate').addEventListener('click',()=>toast('当前已是最新版本 v1.0.0'));
+if(window.hya){
+  window.hya.getMaterialDir().then(r=>{if(r.ok&&r.dir)$('#matDirText').textContent='当前：'+r.dir});
+  $('#pickMatDir').addEventListener('click',()=>window.hya.pickMaterialDir().then(r=>{
+    if(r.ok){$('#matDirText').textContent='当前：'+r.dir;toast('素材目录已更新');}
+  }));
+}else{$('#pickMatDir').addEventListener('click',()=>toast('桌面版中可选择素材文件夹'));}
+
+const _qp=new URLSearchParams(location.search).get('page');
+if(_qp){const _n=document.querySelector(`.nav-item[data-page="${_qp}"]`);if(_n)_n.click()}
+
+/* ================= 搜索 ================= */
+$('#searchInput').addEventListener('input',e=>{
+  const q=e.target.value.trim();
+  if(!q){$$('.page').forEach(p=>p.classList.remove('show'));$('.nav-item.active').click();return}
+  $$('.page').forEach(p=>p.classList.remove('show'));$('#page-tools').classList.add('show');
+  $$('#page-tools .card').forEach(c=>{
+    c.style.display=c.textContent.includes(q)?'':'none';
+  });
+  if(!q)$$('#page-tools .card').forEach(c=>c.style.display='');
+});
+</script>
+</body>
+</html>
